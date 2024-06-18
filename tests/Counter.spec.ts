@@ -28,12 +28,34 @@ describe('Counter', () => {
             from: deployer.address,
             to: counter.address,
             deploy: true,
-            success: true,
         });
     });
 
     it('should deploy', async () => {
         // the check is done inside beforeEach
         // blockchain and counter are ready to use
+    });
+
+    it('should update the number', async () => {
+        const caller = await blockchain.treasury('caller');
+
+        await counter.sendIncrementValue(caller.getSender(), toNano('0.05'), 1000n);
+        expect(await counter.getTotal()).toEqual(1000n);
+
+
+        await counter.sendIncrementValue(caller.getSender(), toNano('0.05'), 2000n);
+        expect(await counter.getTotal()).toEqual(3000n);
+    });
+
+    it('should throw error when number is not 32 bits', async () => {
+        const caller = await blockchain.treasury('caller');
+    
+        const result = await counter.sendDeploy(caller.getSender(), toNano('0.01'));
+        expect(result.transactions).toHaveTransaction({
+            from: caller.address,
+            to: counter.address,
+            success: false,
+            exitCode: 35,
+        });
     });
 });
