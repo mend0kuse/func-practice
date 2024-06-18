@@ -8,6 +8,4 @@ export async function run(provider: NetworkProvider) {
     await counter.sendDeploy(provider.sender(), toNano('0.05'));
 
     await provider.waitForDeploy(counter.address);
-
-    // run methods on `counter`
 }
