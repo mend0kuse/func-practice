@@ -1,0 +1,8 @@
+slice parse_sender_address (cell in_msg_full) inline {
+  var ds = in_msg_full.begin_parse();
+  var flags = ds~load_uint(4);
+  return ds~load_msg_addr();
+}
+
+
+int equal_slices (slice a, slice b) asm "SDEQ";
