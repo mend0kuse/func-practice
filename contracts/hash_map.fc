@@ -1,0 +1,65 @@
+#include "imports/stdlib.fc";
+#include "imports/utils.fc";
+
+cell load_data() {
+    cell data = get_data();
+    slice ds = data.begin_parse();
+    cell dict = ds.slice_bits() == 0 ? new_dict() : data;
+
+    return dict;
+}
+
+() recv_internal(int my_balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {
+    int op = in_msg_body~load_uint(32);
+	int query_id = in_msg_body~load_uint(64);
+
+    if(op == 1) {
+        int key = in_msg_body~load_uint(256);
+
+        cell dict = load_data();
+        dict~udict_set(256, key, in_msg_body);
+        set_data(dict);
+
+        return ();
+    }
+
+    if(op == 2) {
+        in_msg_body.end_parse(); ;; throw error, if slice is not empty
+
+        cell dict = load_data();
+        (int key, slice cs, int flag) = dict.udict_get_min?(256);
+       
+        while (flag) {
+            int value = cs~load_uint(64);
+
+            if value < now() {
+                dict~udict_delete?(256, key);
+            }
+
+            (key, cs, flag) = dict.udict_get_next?(256, key);
+        }   
+
+        if (dict.dict_empty?()) {
+		    set_data(begin_cell().end_cell());
+	    } else {
+		    set_data(dict);
+	    }
+
+        return ();
+    }
+
+    throw(6);
+}
+
+
+(int) get_value(int key) method_id {
+    cell dict = load_data();
+    slice ds = dict.begin_parse();
+
+    (slice cs, int success) = dict.udict_get?(256, key);
+
+    throw_unless(98, success);
+    
+    int value = cs~load_uint(64);
+    return value;
+}
