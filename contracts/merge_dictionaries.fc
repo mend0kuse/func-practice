@@ -1,0 +1,28 @@
+#include "imports/stdlib.fc";
+
+() recv_internal(int my_balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {
+
+}
+
+const int KEY_BITES = 256;
+
+(cell, cell) get_merge_hashmaps(cell dict1, cell dict2) method_id {
+    cell merged_dict = dict2;
+    cell discarded_dict = new_dict();
+
+    (int key, slice value, int flag) = dict1.udict_get_min?(KEY_BITES);
+
+    while (flag) {
+        (slice value2, int flag2) = merged_dict~udict_delete_get?(KEY_BITES, key);
+
+        if flag2 {
+            discarded_dict~udict_set(KEY_BITES, key, value2);
+        }
+
+        merged_dict~udict_set(KEY_BITES , key, value);
+
+        (key, value, flag) = dict1.udict_get_next?(KEY_BITES, key);
+    }
+    
+    return (merged_dict, discarded_dict);
+}
