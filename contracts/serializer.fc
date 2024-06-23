@@ -1,0 +1,139 @@
+#include "imports/stdlib.fc";
+#include "imports/typehelpers.fc";
+
+{- 
+
+Write the methods: 
+a) for serialization of tuple of arbitrary values of different types to Cell 
+b) for deserialization of Cell created by method above to original tuple serialize method gets as input tuple with arbitrary number of elements from 0 to 128 (both 0 and 128 elements are allowed) and outputs Cell. 
+
+Elements of the tuple may be null, int, cell, slice, tuple (with the same limitations as original tuple). 
+It is guaranteed that the maximum nesting level of tuples is less than 4 and total number of elements less than 1024. 
+
+deserialize method gets a cell produced by serialize method and should return origin tuple.
+
+-}
+
+const int KEY_LEN = 32;
+const int TYPE_LEN = 3;
+
+const int NULL_TYPE = 1;
+const int CELL_TYPE = 2;
+const int SLICE_TYPE = 3;
+const int INT_TYPE = 4;
+const int START_NESTED_TUPLE = 5;
+const int END_NESTED_TUPLE = 6;
+
+global int dict_index;
+
+() recv_internal() {
+}
+
+;; recursive helper
+
+(cell) _serialize(cell dict, var x) {
+    dict_index += 1;
+
+    if is_null(x) {
+        dict~udict_set_builder(KEY_LEN, dict_index, begin_cell().store_uint(NULL_TYPE, TYPE_LEN));
+    }
+
+    if is_int(x) {
+        int int_x = force_cast_to_int(x);
+        dict~udict_set_builder(KEY_LEN, dict_index, begin_cell().store_uint(INT_TYPE, TYPE_LEN)).store_int(int_x, 257);
+    } 
+    
+    if is_cell(x) {
+        cell cell_x = force_cast_to_cell(x);
+        dict~udict_set_builder(KEY_LEN, dict_index, begin_cell().store_uint(CELL_TYPE, TYPE_LEN)).store_ref(cell_x);
+    } 
+    
+    if is_slice(x) {
+        cell slice_x = force_cast_to_slice(x);
+        dict~udict_set_builder(KEY_LEN, dict_index, begin_cell().store_uint(SLICE_TYPE, TYPE_LEN)).store_slice(slice_x);
+    } 
+        
+    if is_tuple(x) {
+        tuple tuple_x = force_cast_to_tuple(x);
+
+        ;; start of nested tuple
+        dict~udict_set_builder(KEY_LEN, dict_index, begin_cell().store_uint(START_NESTED_TUPLE, TYPE_LEN));
+        
+        int len = tuple_x.tlen();
+        int i = 1;
+
+        while (i <= len) {
+            var inner_x = tuple_x.at(i);
+            dict = _serialize(dict, inner_x);
+
+            i += 1;
+        }
+
+        ;; end of nested tuple
+        dict_index += 1;
+        dict~udict_set_builder(KEY_LEN, dict_index, begin_cell().store_uint(END_NESTED_TUPLE, TYPE_LEN));
+    } 
+
+    return dict;
+}
+
+(cell) serialize(tuple values) method_id {
+    dict_index = 0;
+    return _serialize(new_dict(), values);
+}
+
+(tuple) deserialize(cell serialized) method_id {
+    tuple stack = new_dict();
+
+    int depth = 0;
+
+    (int key, builder val, int flag) = serialized.udict_get_min?(KEY_LEN);
+
+    while (flag) {
+        int type = val~load_uint(TYPE_LEN);
+
+        if type == NULL_TYPE {
+            tuple current = stack~pop();
+            current~tpush(x);
+            stack~tpush(current);
+        }
+
+        if type == INT_TYPE {
+            tuple current = stack~pop();
+            current~tpush(val~load_int(257));
+            stack~tpush(current);
+        }
+
+        if type == CELL_TYPE {      
+            tuple current = stack~pop();
+            current~tpush(val~load_ref());
+            stack~tpush(current);
+        }
+
+        if type == SLICE_TYPE {
+            tuple current = stack~pop();
+            current~tpush(val);
+            stack~tpush(current);
+        }
+
+        if type == START_NESTED_TUPLE {
+            stack~tpush(empty_tuple());
+            depth += 1;
+        }
+
+        if type == END_NESTED_TUPLE {
+            depth -= 1;
+            if depth > 0 {
+                tuple current = stack~pop();
+                tuple prev = stack~pop();
+
+                prev~tpush(current);
+                stack~tpush(prev);
+            }
+        }
+
+        (key, val, flag) = serialized.udict_get_next?(KEY_LEN, key);
+    }
+
+    return (first(stack));
+}
